@@ -1,9 +1,15 @@
-from fastapi import FastAPI
+
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from .routers import posts, users, auth
 from .config import settings
+from .database import get_db
 
-# Production da docs o'chirish (ixtiyoriy)
+
+# FastAPI ilovasi
 app = FastAPI(
     title="Blog API",
     version="5.0.0",
@@ -12,6 +18,8 @@ app = FastAPI(
     openapi_url=None if settings.is_production else "/openapi.json",
 )
 
+
+# CORS sozlamalari
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins_list,
@@ -20,22 +28,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Routerlar
 app.include_router(posts.router)
 app.include_router(users.router)
 app.include_router(auth.router)
 
-@app.get("/")
-def root():
+
+# Asosiy sahifa
+@app.get("/", tags=["Health"])
+def home():
     return {
         "xabar": "Blog API",
         "version": "5.0.0",
-        "environment": settings.environment
+        "environment": settings.environment,
     }
 
-# Health check — deploy platformalar uchun
-@app.get("/health")
-def health_check():
+
+# Health check: ilova va ma'lumotlar bazasini tekshirish
+@app.get("/health", tags=["Health"])
+def health_check(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
     return {"status": "ok"}
 
-
-    # hello
