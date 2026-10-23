@@ -1,7 +1,14 @@
-from fastapi import FastAPI
+
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from .routers import posts, users, auth
 from .config import settings
+from .database import get_db
+
 
 # Production da docs o'chirish (ixtiyoriy)
 app = FastAPI(
@@ -33,9 +40,31 @@ def root():
     }
 
 # Health check — deploy platformalar uchun
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+
+
+@app.get("/health", tags=["Health"])
+def health_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        db.rollback()
+        db_status = "error"
+
+    response_data = {
+        "status": "ok" if db_status == "ok" else "error",
+        "database": db_status,
+        "environment": settings.environment,
+        "version": "5.0.0",
+    }
+
+    status_code = 200 if db_status == "ok" else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content=response_data,
+    )
+
 
 
     # hello

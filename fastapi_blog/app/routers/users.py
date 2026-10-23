@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from ..database import get_db
-from ..utils.hashing import hash_password
+from ..utils.hashing import hash_password, verify_password
 from .. import models, schemas, oauth2
 
 router = APIRouter(
@@ -63,4 +64,40 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         )
 
     return user
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
 
+
+@router.put("/me/password")
+def change_password(
+    passwords: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user)
+):
+    if not verify_password(
+        passwords.old_password,
+        current_user.password
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Eski parol noto'g'ri"
+        )
+
+    if len(passwords.new_password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Yangi parol kamida 8 ta belgidan iborat bo'lishi kerak"
+        )
+
+    if passwords.old_password == passwords.new_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Yangi parol eski paroldan farq qilishi kerak"
+        )
+
+    current_user.password = hash_password(passwords.new_password)
+    db.commit()
+    db.refresh(current_user)
+
+    return {"message": "Parol muvaffaqiyatli o'zgartirildi"}
