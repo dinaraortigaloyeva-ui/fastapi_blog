@@ -10,7 +10,7 @@ from .config import settings
 from .database import get_db
 
 
-# Production da docs o'chirish (ixtiyoriy)
+# FastAPI ilovasi
 app = FastAPI(
     title="Blog API",
     version="5.0.0",
@@ -19,6 +19,8 @@ app = FastAPI(
     openapi_url=None if settings.is_production else "/openapi.json",
 )
 
+
+# CORS sozlamalari
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins_list,
@@ -27,21 +29,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Routerlar
 app.include_router(posts.router)
 app.include_router(users.router)
 app.include_router(auth.router)
 
-@app.get("/")
-def root():
+
+# Asosiy sahifa
+@app.get("/", tags=["Health"])
+def home():
     return {
         "xabar": "Blog API",
         "version": "5.0.0",
-        "environment": settings.environment
+        "environment": settings.environment,
     }
 
-# Health check — deploy platformalar uchun
 
-
+# Health check — ilova va ma'lumotlar bazasini tekshirish
 @app.get("/health", tags=["Health"])
 def health_check(db: Session = Depends(get_db)):
     try:
@@ -64,7 +69,3 @@ def health_check(db: Session = Depends(get_db)):
         status_code=status_code,
         content=response_data,
     )
-
-
-
-    # hello
