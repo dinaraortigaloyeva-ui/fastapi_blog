@@ -24,7 +24,7 @@ def create_post(
 ):
     new_post = models.Post(
         owner_id=current_user.id,   # Kim yaratdi
-        **post.dict()
+        **post.model_dump()
     )
     db.add(new_post)
     db.commit()
@@ -95,7 +95,7 @@ def update_post(
         )
 
     post_query.update(
-        updated_post.dict(),
+        updated_post.model_dump(),
         synchronize_session=False
     )
     db.commit()

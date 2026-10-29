@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-
+from typing import List, Optional
+from .. import models, schemas
 from ..database import get_db
+from ..utils.hashing import hash_password
+from ..oauth2 import get_current_user
 from ..utils.hashing import hash_password, verify_password
-from .. import models, schemas, oauth2
-
 router = APIRouter(
     prefix="/users",
     tags=["Users"]
@@ -33,7 +33,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     hashed = hash_password(user.password)
     user.password = hashed
 
-    new_user = models.User(**user.dict())
+    new_user = models.User(**user.model_dump())
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -41,12 +41,40 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
-# ─── MEN ──────────────────────────────────────
-@router.get("/me", response_model=schemas.UserResponse)
-def get_current_user_info(
-    current_user: models.User = Depends(oauth2.get_current_user)
+# ─── GET CURRENT USER ─────────────────────────
+@router.get(
+    "/me",
+    response_model=schemas.UserResponse
+)
+def get_me(
+    current_user: models.User = Depends(get_current_user)
 ):
     return current_user
+
+# ─── CHANGE PASSWORD ─────────────────────────
+@router.put("/me/password")
+def change_password(
+    password_data: schemas.ChangePassword,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Eski parolni tekshirish
+    if not verify_password(
+        password_data.old_password,
+        current_user.password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Eski parol noto'g'ri"
+        )
+
+    # Yangi parolni xashlash
+    current_user.password = hash_password(password_data.new_password)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {"message": "Parol muvaffaqiyatli o'zgartirildi"}
 
 
 # ─── GET USER ─────────────────────────────────
@@ -64,40 +92,21 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         )
 
     return user
-class PasswordChange(BaseModel):
-    old_password: str
-    new_password: str
 
 
-@router.put("/me/password")
-def change_password(
-    passwords: PasswordChange,
+# ─── READ ALL (qidiruv + pagination) ─────────
+@router.get(
+    "/",
+    response_model=List[schemas.PostResponse]
+)
+def get_all_posts(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user)
+    limit: int = 10,
+    skip: int = 0,
+    search: Optional[str] = ""
 ):
-    if not verify_password(
-        passwords.old_password,
-        current_user.password
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Eski parol noto'g'ri"
-        )
+    posts = db.query(models.Post).filter(
+        models.Post.title.contains(search)
+    ).limit(limit).offset(skip).all()
 
-    if len(passwords.new_password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="Yangi parol kamida 8 ta belgidan iborat bo'lishi kerak"
-        )
-
-    if passwords.old_password == passwords.new_password:
-        raise HTTPException(
-            status_code=400,
-            detail="Yangi parol eski paroldan farq qilishi kerak"
-        )
-
-    current_user.password = hash_password(passwords.new_password)
-    db.commit()
-    db.refresh(current_user)
-
-    return {"message": "Parol muvaffaqiyatli o'zgartirildi"}
+    return posts
